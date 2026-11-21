@@ -3,7 +3,7 @@ html,body{margin:0;height:100%;font-family:-apple-system,system-ui,sans-serif;ba
 [hidden]{display:none!important}
 button,.btn{background:#3a322c;color:#eee;border:0;border-radius:8px;padding:8px 14px;font-size:15px;cursor:pointer}
 button:hover,.btn:hover{background:#4a3f37}
-#library{padding:24px;max-width:1000px;margin:auto}
+#library{padding:calc(24px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));max-width:1000px;margin:auto}
 #library header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
 #library h1{margin:0}
 #shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:28px}
