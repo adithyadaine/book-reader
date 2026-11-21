@@ -18,13 +18,15 @@ button:hover,.btn:hover{background:#4a3f37}
 .cover .prog i{display:block;height:100%;background:#e8c36a}
 #empty{opacity:.6;text-align:center;margin-top:60px}
 
-#reader{height:100%;display:flex;flex-direction:column;background:radial-gradient(ellipse at center,#3b322b,#171310)}
-#bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;gap:10px}
+#reader{position:fixed;inset:0;height:100dvh;overflow:hidden;background:radial-gradient(ellipse at center,#3b322b,#171310)}
+#bar{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 14px 24px;gap:10px;
+  background:linear-gradient(rgba(0,0,0,.75),transparent);transform:translateY(-110%);opacity:0;pointer-events:none;transition:transform .25s,opacity .25s}
+#bar.show,#controls.show{transform:none;opacity:1;pointer-events:auto}
 #title{opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#stage{flex:1;display:flex;justify-content:center;align-items:center;position:relative;min-height:0}
+#stage{position:absolute;inset:0;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);display:flex;justify-content:center;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #book{filter:drop-shadow(0 18px 30px rgba(0,0,0,.6))}
 #loading{position:absolute;opacity:.8}
-#controls{display:flex;align-items:center;gap:12px;padding:10px 18px calc(12px + env(safe-area-inset-bottom))}
+#controls{position:absolute;bottom:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:12px;padding:28px 18px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.8));transform:translateY(110%);opacity:0;pointer-events:none;transition:transform .25s,opacity .25s}
 #slider{flex:1}
 #label{min-width:80px;text-align:center;font-size:13px;opacity:.8}
 
@@ -42,3 +44,9 @@ button:hover,.btn:hover{background:#4a3f37}
 .page .num{position:absolute;bottom:8px;width:100%;text-align:center;font:11px sans-serif;opacity:.45}
 body.dark .page:not(.hard){background:#1d1b19;color:#cfc8bb}
 body.dark .page canvas{filter:invert(.9) hue-rotate(180deg);mix-blend-mode:screen}
+
+.page.hard.pdfcover{background:#000;padding:0}
+.page.hard.pdfcover canvas{mix-blend-mode:normal;filter:none}
+.cover.hascover{background-size:cover;background-position:center;padding:0}
+.cover.hascover span,.cover.hascover small{display:none}
+.cover.hascover .prog{left:12px}
