@@ -173,7 +173,7 @@ function getInsets() {
 function bookSize(aspect) {
   const r = $('#reader');
   const availW = (r && r.clientWidth) || innerWidth;
-  const availH = (r && r.clientHeight) || innerHeight;
+  const availH = Math.max(window.innerHeight, document.documentElement.clientHeight, (r && r.clientHeight) || 0);
   const portrait = availW < 760;
   if (portrait) return { w: Math.floor(availW), h: Math.floor(availH), portrait };
   const cs = getComputedStyle($('#stage'));
@@ -186,10 +186,16 @@ function bookSize(aspect) {
 const hardPage = (title, sub = '') => { const d = document.createElement('div'); d.className = 'page hard'; d.dataset.density = 'hard'; d.innerHTML = `<div></div><small style="font:13px sans-serif;opacity:.6;margin-top:14px">${sub}</small>`; d.firstChild.textContent = title; return d; };
 const blankPage = () => { const d = document.createElement('div'); d.className = 'page'; return d; };
 
+const updateTheme = () => {
+  const meta = $('meta[name="theme-color"]');
+  if (meta) meta.content = ($('#reader') && !$('#reader').hidden) ? (document.body.classList.contains('dark') ? '#1d1b19' : '#faf5e8') : '#1e1a17';
+};
+
 async function openBook(id) {
   current = await getBook(id);
   if (!current) return;
   document.body.classList.add('reading');
+  updateTheme();
   $('#library').hidden = true; $('#reader').hidden = false; $('#title').textContent = current.title;
   await buildBook();
 }
@@ -409,6 +415,7 @@ $('#back').onclick = e => {
   document.body.classList.remove('reading');
   $('#reader').hidden = true;
   $('#library').hidden = false;
+  updateTheme();
   renderLibrary();
   try { releaseBook(); } catch (err) { console.error(err); }
   current = null;
@@ -419,8 +426,8 @@ $('#slider').onchange = e => { if (pf) { pf.turnToPage(+e.target.value); sync();
 $('#slider').oninput = () => setUI(true);
 $('#controls').onclick = $('#bar').onclick = () => setUI(true);
 $('#toc').onclick = e => { e.stopPropagation(); showToc(); };
-$('#theme').onclick = () => { document.body.classList.toggle('dark'); localStorage.dark = document.body.classList.contains('dark') ? 1 : ''; };
-if (localStorage.dark) document.body.classList.add('dark');
+$('#theme').onclick = () => { document.body.classList.toggle('dark'); localStorage.dark = document.body.classList.contains('dark') ? 1 : ''; updateTheme(); };
+if (localStorage.dark) { document.body.classList.add('dark'); updateTheme(); }
 document.addEventListener('keydown', e => { if (!pf) return; if (e.key === 'ArrowRight') pf.flipNext(); if (e.key === 'ArrowLeft') pf.flipPrev(); });
 addEventListener('resize', () => { if (!current || $('#reader').hidden) return;
   if (Math.abs(innerWidth - lastW) < 60 && Math.abs(innerHeight - lastH) < 150) return; clearTimeout(resizeT); resizeT = setTimeout(buildBook, 400); });
