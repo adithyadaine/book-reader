@@ -669,6 +669,8 @@ $('#back').onclick = e => {
   try { releaseBook(); } catch (err) { console.error(err); }
   current = null;
 };
+// always-visible back pill shares the same handler
+$('#back-pill').onclick = e => $('#back').onclick(e);
 $('#next').onclick = () => pf && pf.flipNext();
 $('#prev').onclick = () => pf && pf.flipPrev();
 $('#slider').onchange = e => { if (pf) { pf.turnToPage(+e.target.value); sync(); } };

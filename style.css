@@ -99,6 +99,29 @@ button.danger{color:#ff6b6b}
 .collcard .label{font-weight:600}
 .collcard small{opacity:.6}
 
+/* Always-visible back pill — anchored above the safe area, always accessible */
+#back-pill{
+  position:absolute;
+  top:calc(env(safe-area-inset-top) + 10px);
+  left:calc(env(safe-area-inset-left) + 10px);
+  z-index:20;
+  width:36px;height:36px;
+  border-radius:50%;
+  background:rgba(0,0,0,.45);
+  color:#fff;
+  font-size:18px;
+  line-height:36px;
+  text-align:center;
+  padding:0;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.18);
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:auto;
+  transition:background .15s,transform .12s;
+}
+#back-pill:active{background:rgba(0,0,0,.7);transform:scale(.9)}
+
 /* Toolbar Buttons */
 #bookmark,#type-btn,#toc{width:38px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:1}
 #bookmark svg{display:block;transition:transform .12s,fill .15s,stroke .15s}
