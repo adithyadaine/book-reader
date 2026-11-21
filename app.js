@@ -102,7 +102,7 @@ function showMenu(id) {
         row.append(cb, document.createTextNode(' ' + name)); list.append(row); });
       sheet.querySelector('.new').onclick = async () => { const n = (prompt('Collection name') || '').trim(); if (!n) return;
         const c = getColls(); if (!c.includes(n)) { c.push(n); setColls(c); } b.collections = [...new Set([...(b.collections || []), n])]; await putBook(b); draw(); };
-      sheet.querySelector('.danger').onclick = async () => { if (confirm('Delete "' + b.title + '"?')) { await delBook(b.id); localStorage.removeItem('prog:' + b.id); sheet.remove(); renderLibrary(); } };
+      sheet.querySelector('.danger').onclick = async () => { if (confirm('Delete "' + b.title + '"?')) { await delBook(b.id); localStorage.removeItem('prog:' + b.id); localStorage.removeItem('bm:' + b.id); sheet.remove(); renderLibrary(); } };
       sheet.querySelector('.close').onclick = () => { sheet.remove(); renderLibrary(); };
     };
     sheet.onclick = e => { if (e.target === sheet) { sheet.remove(); renderLibrary(); } };
@@ -151,8 +151,198 @@ $('#file').onchange = async e => {
   e.target.value = ''; renderLibrary();
 };
 
+// ---------- themes & reader comfort ----------
+const THEMES = ['light', 'sepia', 'dark', 'oled'];
+const THEME_COLORS = {
+  light: '#faf5e8',
+  sepia: '#f4ecd8',
+  dark: '#1d1b19',
+  oled: '#000000'
+};
+
+function getSavedTheme() {
+  const t = localStorage.reader_theme;
+  if (THEMES.includes(t)) return t;
+  if (localStorage.dark === '1') return 'dark';
+  return 'light';
+}
+
+function applyTheme(t) {
+  if (!THEMES.includes(t)) t = 'light';
+  THEMES.forEach(name => document.body.classList.remove('theme-' + name));
+  document.body.classList.add('theme-' + t);
+  localStorage.reader_theme = t;
+  localStorage.dark = (t === 'dark' || t === 'oled') ? '1' : '';
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.theme === t);
+  });
+  updateTheme();
+}
+
+function updateTheme() {
+  const isReading = $('#reader') && !$('#reader').hidden;
+  const meta = $('meta[name="theme-color"]');
+  if (meta) {
+    if (isReading) {
+      const cur = getSavedTheme();
+      meta.content = THEME_COLORS[cur] || '#faf5e8';
+    } else {
+      meta.content = '#1e1a17';
+    }
+  }
+}
+
+// ---------- Screen Wake Lock ----------
+let wakeLock = null;
+async function requestWakeLock() {
+  if ('wakeLock' in navigator && document.visibilityState === 'visible') {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (e) {
+      wakeLock = null;
+    }
+  }
+}
+function releaseWakeLock() {
+  if (wakeLock) {
+    try { wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && current && $('#reader') && !$('#reader').hidden) {
+    requestWakeLock();
+  } else {
+    releaseWakeLock();
+  }
+});
+
+// ---------- typography (EPUB) ----------
+const FONT_SIZES = [14, 16, 18, 19, 21, 24, 28, 32];
+let rebuildT = null;
+
+function getFontSize() {
+  const s = parseInt(localStorage.reader_font_size || '19', 10);
+  return isNaN(s) ? 19 : s;
+}
+function updateFontSizeUI(s) {
+  const val = $('#font-size-val');
+  if (val) val.textContent = s + 'px';
+  const dec = $('#font-dec'), inc = $('#font-inc');
+  if (dec) dec.disabled = s <= FONT_SIZES[0];
+  if (inc) inc.disabled = s >= FONT_SIZES[FONT_SIZES.length - 1];
+}
+function setFontSize(newSize) {
+  localStorage.reader_font_size = newSize;
+  document.documentElement.style.setProperty('--reader-font-size', newSize + 'px');
+  updateFontSizeUI(newSize);
+  if (current && current.type === 'epub') {
+    clearTimeout(rebuildT);
+    rebuildT = setTimeout(buildBook, 350);
+  }
+}
+function stepFontSize(dir) {
+  const cur = getFontSize();
+  let idx = FONT_SIZES.indexOf(cur);
+  if (idx === -1) {
+    idx = FONT_SIZES.reduce((prev, c, i) => Math.abs(c - cur) < Math.abs(FONT_SIZES[prev] - cur) ? i : prev, 3);
+  }
+  const nextIdx = Math.max(0, Math.min(FONT_SIZES.length - 1, idx + dir));
+  setFontSize(FONT_SIZES[nextIdx]);
+}
+function getFontFamily() {
+  return localStorage.reader_font_family || 'Georgia, serif';
+}
+function setFontFamily(font) {
+  localStorage.reader_font_family = font;
+  document.documentElement.style.setProperty('--reader-font-family', font);
+  updateFontFamilyUI(font);
+  if (current && current.type === 'epub') {
+    clearTimeout(rebuildT);
+    rebuildT = setTimeout(buildBook, 350);
+  }
+}
+function updateFontFamilyUI(font) {
+  document.querySelectorAll('.font-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.font === font);
+  });
+}
+
+// ---------- bookmarks ----------
+function getBookmarks(id) {
+  if (!id) return [];
+  try {
+    const list = JSON.parse(localStorage['bm:' + id] || '[]');
+    return Array.isArray(list) ? list.sort((a, b) => a.page - b.page) : [];
+  } catch (e) {
+    return [];
+  }
+}
+function setBookmarks(id, list) {
+  if (!id) return;
+  localStorage['bm:' + id] = JSON.stringify(list);
+}
+function isPageBookmarked(id, pageIdx) {
+  return getBookmarks(id).some(b => b.page === pageIdx);
+}
+function getSnippetForPage(pageIdx) {
+  const p = pages[pageIdx];
+  if (!p) return `Page ${pageIdx}`;
+  const c = p.querySelector('.content');
+  if (c && c.innerText) {
+    const txt = c.innerText.replace(/\s+/g, ' ').trim();
+    if (txt) return txt.slice(0, 75) + (txt.length > 75 ? '…' : '');
+  }
+  const match = toc.slice().reverse().find(t => t.page <= pageIdx);
+  if (match && match.title) return `${match.title} · p. ${pageIdx}`;
+  return `Page ${pageIdx}`;
+}
+function toggleBookmark() {
+  if (!current || !pf) return;
+  const pageIdx = pf.getCurrentPageIndex();
+  let bms = getBookmarks(current.id);
+  const exists = bms.some(b => b.page === pageIdx);
+  if (exists) {
+    bms = bms.filter(b => b.page !== pageIdx);
+  } else {
+    bms.push({
+      page: pageIdx,
+      text: getSnippetForPage(pageIdx),
+      time: Date.now()
+    });
+  }
+  setBookmarks(current.id, bms);
+  updateBookmarkRibbons();
+  updateBookmarkUI(pageIdx);
+}
+function updateBookmarkRibbons() {
+  if (!current) return;
+  const bms = new Set(getBookmarks(current.id).map(b => b.page));
+  pages.forEach((p, idx) => {
+    let ribbon = p.querySelector('.ribbon');
+    if (bms.has(idx)) {
+      if (!ribbon) {
+        ribbon = document.createElement('div');
+        ribbon.className = 'ribbon';
+        ribbon.setAttribute('aria-hidden', 'true');
+        p.append(ribbon);
+      }
+    } else if (ribbon) {
+      ribbon.remove();
+    }
+  });
+}
+function updateBookmarkUI(pageIdx) {
+  const isBm = current ? isPageBookmarked(current.id, pageIdx) : false;
+  const bmBtn = $('#bookmark');
+  if (bmBtn) {
+    bmBtn.classList.toggle('on', isBm);
+    bmBtn.title = isBm ? 'Remove bookmark' : 'Bookmark page';
+  }
+}
+
 // ---------- reader ----------
-// build: bumped on every (re)build so a slow, stale build can't create a second flipbook on top of the current one
 let pf = null, current = null, pages = [], toc = [], doc = null, urls = [], build = 0, resizeT, lastW = 0, lastH = 0, ui = false, uiT;
 
 // ---------- safe area insets ----------
@@ -168,8 +358,6 @@ function getInsets() {
   };
 }
 
-// measured from the window, not the stage: iOS home-screen apps can report a short 100dvh, which left a dead band at the bottom
-// phones: stage and pages bleed edge-to-edge; text & PDFs fit safely inside insets. Wider screens: two pages side by side.
 function bookSize(aspect) {
   const r = $('#reader');
   const availW = (r && r.clientWidth) || innerWidth;
@@ -186,14 +374,14 @@ function bookSize(aspect) {
 const hardPage = (title, sub = '') => { const d = document.createElement('div'); d.className = 'page hard'; d.dataset.density = 'hard'; d.innerHTML = `<div></div><small style="font:13px sans-serif;opacity:.6;margin-top:14px">${sub}</small>`; d.firstChild.textContent = title; return d; };
 const blankPage = () => { const d = document.createElement('div'); d.className = 'page'; return d; };
 
-const updateTheme = () => {
-  const meta = $('meta[name="theme-color"]');
-  if (meta) meta.content = ($('#reader') && !$('#reader').hidden) ? (document.body.classList.contains('dark') ? '#1d1b19' : '#faf5e8') : '#1e1a17';
-};
-
 async function openBook(id) {
   current = await getBook(id);
   if (!current) return;
+  requestWakeLock();
+  const isPdf = current.type === 'pdf';
+  document.querySelectorAll('#type-panel .epub-only').forEach(el => el.hidden = isPdf);
+  const hint = $('#type-panel .pdf-hint'); if (hint) hint.hidden = !isPdf;
+  $('#type-panel').hidden = true;
   document.body.classList.add('reading');
   updateTheme();
   $('#library').hidden = true; $('#reader').hidden = false; $('#title').textContent = current.title;
@@ -230,7 +418,6 @@ async function buildBook() {
   if (my !== build) { if (r.doc) { try { const p = r.doc.destroy(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } (r.urls || []).forEach(u => URL.revokeObjectURL(u)); return; }
   const { content, size, cover } = r; doc = r.doc || null; urls = r.urls || []; toc = r.toc || [];
   lastW = innerWidth; lastH = innerHeight;
-  // cover + content (+ filler) + back cover => even total so last page sits alone
   pages = [cover || hardPage(current.title, current.type.toUpperCase()), ...content];
   if ((pages.length + 1) % 2) pages.push(blankPage());
   pages.push(hardPage(''));
@@ -246,38 +433,103 @@ async function buildBook() {
     try { pf.turnToPage(start); } catch (e) {}
   }
   $('#slider').max = pages.length - 1;
-  $('#toc').hidden = !toc.length;
+  updateBookmarkRibbons();
   sync();
 }
 function sync() {
   if (!pf || !current || !pages.length) return; const i = pf.getCurrentPageIndex(); $('#slider').value = i; $('#label').textContent = `${i} / ${pages.length - 1}`;
-  updateLazy(i); setProg(current, i / Math.max(1, pages.length - 1));
+  updateLazy(i); updateBookmarkUI(i); setProg(current, i / Math.max(1, pages.length - 1));
 }
 function updateLazy(i) {
   if (!current) return;
-  // PDF pages are canvases (several MB each), so keep fewer of them alive than EPUB pages
   const R = current.type === 'pdf' ? 3 : 4;
   pages.forEach((p, k) => { const f = p._fill; if (!f) return; const near = Math.abs(k - i) <= R;
     if (near && !p._on) { p._on = true; f(p); } else if (!near && p._on) { p._on = false; try { p._clear && p._clear(p); } catch (e) {} } });
 }
 
-// ---------- table of contents ----------
-function showToc() {
+// ---------- table of contents & bookmarks sheet ----------
+function showToc(initialTab = 'toc') {
   const sheet = document.createElement('div'); sheet.id = 'sheet';
-  sheet.innerHTML = '<div class="panel"><h3>Contents</h3><div class="list toc"></div><button class="close">Done</button></div>';
-  const list = sheet.querySelector('.list'), here = pf ? pf.getCurrentPageIndex() : 0;
+  const hasToc = toc && toc.length > 0;
+  const activeTab = (!hasToc && initialTab === 'toc') ? 'bms' : initialTab;
+
+  sheet.innerHTML = `
+    <div class="panel">
+      <div class="sheet-tabs">
+        <button class="tab-btn ${activeTab === 'toc' ? 'on' : ''}" data-sheet-tab="toc" ${hasToc ? '' : 'disabled'}>Contents</button>
+        <button class="tab-btn ${activeTab === 'bms' ? 'on' : ''}" data-sheet-tab="bms">Bookmarks</button>
+      </div>
+      <div class="list toc" id="sheet-toc" ${activeTab !== 'toc' ? 'hidden' : ''}></div>
+      <div class="list bms" id="sheet-bms" ${activeTab !== 'bms' ? 'hidden' : ''}></div>
+      <button class="close">Done</button>
+    </div>
+  `;
+
+  const tocList = sheet.querySelector('#sheet-toc');
+  const bmsList = sheet.querySelector('#sheet-bms');
+  const here = pf ? pf.getCurrentPageIndex() : 0;
   let mark = null;
-  toc.forEach(t => { const b = document.createElement('button'); b.className = 'row'; b.style.paddingLeft = 8 + Math.max(0, t.depth) * 16 + 'px';
-    const name = document.createElement('span'); name.textContent = t.title || 'Untitled';
-    const n = document.createElement('small'); n.textContent = t.page; b.append(name, n);
-    if (t.page <= here) mark = b;
-    b.onclick = () => { sheet.remove(); if (pf) { pf.turnToPage(t.page); sync(); } };
-    list.append(b); });
-  if (mark) mark.classList.add('here');
+
+  if (hasToc) {
+    toc.forEach(t => {
+      const b = document.createElement('button'); b.className = 'row'; b.style.paddingLeft = (8 + Math.max(0, t.depth) * 16) + 'px';
+      const name = document.createElement('span'); name.textContent = t.title || 'Untitled';
+      const n = document.createElement('small'); n.textContent = t.page; b.append(name, n);
+      if (t.page <= here) mark = b;
+      b.onclick = () => { sheet.remove(); if (pf) { pf.turnToPage(t.page); sync(); } };
+      tocList.append(b);
+    });
+    if (mark) mark.classList.add('here');
+  } else {
+    tocList.innerHTML = '<p class="hint">No table of contents in this document.</p>';
+  }
+
+  function renderSheetBookmarks() {
+    bmsList.innerHTML = '';
+    const bms = getBookmarks(current.id);
+    if (!bms.length) {
+      bmsList.innerHTML = '<p class="hint">No bookmarks yet. Tap the bookmark icon in the top bar to save pages.</p>';
+      return;
+    }
+    bms.forEach(bm => {
+      const row = document.createElement('div'); row.className = 'bm-row';
+      const link = document.createElement('button'); link.className = 'bm-link';
+      link.innerHTML = `<strong class="bm-page">Page ${bm.page}</strong><span class="bm-text"></span>`;
+      link.querySelector('.bm-text').textContent = bm.text;
+      link.onclick = () => {
+        sheet.remove();
+        if (pf) { pf.turnToPage(bm.page); sync(); }
+      };
+      const del = document.createElement('button'); del.className = 'bm-del'; del.title = 'Remove bookmark'; del.setAttribute('aria-label', 'Remove bookmark'); del.textContent = '✕';
+      del.onclick = e => {
+        e.stopPropagation();
+        let list = getBookmarks(current.id).filter(b => b.page !== bm.page);
+        setBookmarks(current.id, list);
+        updateBookmarkRibbons();
+        if (pf) updateBookmarkUI(pf.getCurrentPageIndex());
+        renderSheetBookmarks();
+      };
+      row.append(link, del);
+      bmsList.append(row);
+    });
+  }
+  renderSheetBookmarks();
+
+  sheet.querySelectorAll('.sheet-tabs .tab-btn').forEach(btn => {
+    btn.onclick = () => {
+      if (btn.disabled) return;
+      sheet.querySelectorAll('.sheet-tabs .tab-btn').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+      const target = btn.dataset.sheetTab;
+      tocList.hidden = target !== 'toc';
+      bmsList.hidden = target !== 'bms';
+    };
+  });
+
   sheet.querySelector('.close').onclick = () => sheet.remove();
   sheet.onclick = e => { if (e.target === sheet) sheet.remove(); };
   document.body.append(sheet);
-  if (mark) mark.scrollIntoView({ block: 'center' });
+  if (activeTab === 'toc' && mark) mark.scrollIntoView({ block: 'center' });
 }
 
 // ---------- PDF ----------
@@ -289,7 +541,6 @@ async function preparePDF(buf) {
   const insets = getInsets();
   for (let n = 1; n <= pdf.numPages; n++) {
     const d = document.createElement('div'); d.className = n === 1 ? 'page hard pdfcover' : 'page'; if (n === 1) d.dataset.density = 'hard';
-    // _gen guards against a slow render landing after the page was cleared (or re-filled), which stacked canvases
     d._fill = async el => { const gen = el._gen = (el._gen || 0) + 1;
       let pg; try { pg = await pdf.getPage(n); } catch (e) { return; }
       if (!el._on || gen !== el._gen) { try { pg.cleanup(); } catch (e) {} return; }
@@ -304,7 +555,6 @@ async function preparePDF(buf) {
     d._clear = el => { el._gen = (el._gen || 0) + 1; el.querySelectorAll('canvas').forEach(freeCanvas); };
     if (n === 1) cover = d; else content.push(d);
   }
-  // outline -> [{ title, depth, page }]; PDF page n sits at book index n - 1 (page 1 is the cover)
   const toc = [];
   const walk = async (items, depth) => { for (const it of items || []) {
     try { let dest = it.dest; if (typeof dest === 'string') dest = await pdf.getDestination(dest);
@@ -317,7 +567,6 @@ async function preparePDF(buf) {
 
 // ---------- EPUB ----------
 const resolve = (base, rel) => decodeURIComponent(new URL(rel, 'http://x/' + base).pathname.slice(1));
-// nav document (EPUB 3) or NCX (EPUB 2) -> [{ title, depth, path, frag }]
 async function epubToc(zip, opf, opfPath) {
   const items = [...opf.querySelectorAll('manifest > item')];
   const read = async href => { const p = resolve(opfPath, href); const f = zip.file(p); return f ? { p, s: await f.async('string') } : null; };
@@ -369,7 +618,6 @@ async function prepareEPUB(buf) {
     chapters.push({ path, html: body.innerHTML });
   }
   let toc = []; try { toc = await epubToc(zip, opf, opfPath); } catch (e) {}
-  // tighter margins on a phone so the text uses the screen and stays clear of notch/home bar
   const insets = getInsets();
   const pad = size.portrait ? Math.max(16, insets.left + 16) : 30;
   const vpadTop = size.portrait ? Math.max(22, insets.top + 8) : 36;
@@ -386,7 +634,6 @@ async function prepareEPUB(buf) {
     await Promise.all([...c.querySelectorAll('img')].map(i => i.decode ? i.decode().catch(() => {}) : 0));
     const first = content.length, x0 = c.getBoundingClientRect().left;
     const n = Math.max(1, Math.ceil((c.scrollWidth - pad) / W));
-    // which column each contents entry in this chapter lands in
     for (const t of toc) if (t.path === ch.path && t.page == null) {
       const el = t.frag && (c.querySelector('#' + CSS.escape(t.frag)) || c.querySelector(`[name="${CSS.escape(t.frag)}"]`));
       const col = el ? Math.floor((el.getBoundingClientRect().left - x0) / W) : 0;
@@ -407,10 +654,12 @@ async function prepareEPUB(buf) {
   return { content, size, cover, urls, toc: toc.filter(t => t.page != null) };
 }
 
-// ---------- controls ----------
+// ---------- controls & event listeners ----------
 $('#back').onclick = e => {
   if (e) e.stopPropagation();
   setUI(false);
+  $('#type-panel').hidden = true;
+  releaseWakeLock();
   build++;
   document.body.classList.remove('reading');
   $('#reader').hidden = true;
@@ -425,17 +674,56 @@ $('#prev').onclick = () => pf && pf.flipPrev();
 $('#slider').onchange = e => { if (pf) { pf.turnToPage(+e.target.value); sync(); } };
 $('#slider').oninput = () => setUI(true);
 $('#controls').onclick = $('#bar').onclick = () => setUI(true);
-$('#toc').onclick = e => { e.stopPropagation(); showToc(); };
-$('#theme').onclick = () => { document.body.classList.toggle('dark'); localStorage.dark = document.body.classList.contains('dark') ? 1 : ''; updateTheme(); };
-if (localStorage.dark) { document.body.classList.add('dark'); updateTheme(); }
+$('#toc').onclick = e => { e.stopPropagation(); $('#type-panel').hidden = true; showToc(); };
+$('#bookmark').onclick = e => { e.stopPropagation(); toggleBookmark(); setUI(true); };
+
+// typography panel toggle & interactions
+$('#type-btn').onclick = e => {
+  e.stopPropagation();
+  const p = $('#type-panel');
+  p.hidden = !p.hidden;
+  if (!p.hidden) {
+    setUI(true);
+    clearTimeout(uiT);
+  }
+};
+$('#type-panel').onclick = e => {
+  e.stopPropagation();
+  clearTimeout(uiT);
+};
+document.querySelectorAll('.theme-btn').forEach(btn => {
+  btn.onclick = () => applyTheme(btn.dataset.theme);
+});
+$('#font-dec').onclick = () => stepFontSize(-1);
+$('#font-inc').onclick = () => stepFontSize(1);
+document.querySelectorAll('.font-btn').forEach(btn => {
+  btn.onclick = () => setFontFamily(btn.dataset.font);
+});
+
 document.addEventListener('keydown', e => { if (!pf) return; if (e.key === 'ArrowRight') pf.flipNext(); if (e.key === 'ArrowLeft') pf.flipPrev(); });
 addEventListener('resize', () => { if (!current || $('#reader').hidden) return;
   if (Math.abs(innerWidth - lastW) < 60 && Math.abs(innerHeight - lastH) < 150) return; clearTimeout(resizeT); resizeT = setTimeout(buildBook, 400); });
 
-// immersive: controls only after a tap in the middle; swipe or tap an edge to turn the page
-function setUI(v) { ui = v; $('#bar').classList.toggle('show', v); $('#controls').classList.toggle('show', v); clearTimeout(uiT); if (v) uiT = setTimeout(() => setUI(false), 5000); }
+function setUI(v) {
+  ui = v;
+  $('#bar').classList.toggle('show', v);
+  $('#controls').classList.toggle('show', v);
+  clearTimeout(uiT);
+  if (v) {
+    uiT = setTimeout(() => {
+      setUI(false);
+      $('#type-panel').hidden = true;
+    }, 5000);
+  } else {
+    $('#type-panel').hidden = true;
+  }
+}
+
 const stageEl = $('#stage'); let g = null;
-stageEl.addEventListener('pointerdown', e => { g = { x: e.clientX, y: e.clientY }; });
+stageEl.addEventListener('pointerdown', e => {
+  if (!$('#type-panel').hidden) $('#type-panel').hidden = true;
+  g = { x: e.clientX, y: e.clientY };
+});
 stageEl.addEventListener('pointercancel', () => g = null);
 stageEl.addEventListener('pointerup', e => {
   if (!g || !pf) return; const dx = e.clientX - g.x, dy = e.clientY - g.y; g = null;
@@ -446,6 +734,10 @@ stageEl.addEventListener('pointerup', e => {
   }
 });
 
+// initialize settings on boot
+applyTheme(getSavedTheme());
+setFontSize(getFontSize());
+setFontFamily(getFontFamily());
+
 renderLibrary();
-// ask the browser to keep our storage (books) from being auto-evicted
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();

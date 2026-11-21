@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#2b4fd8">
+<meta name="theme-color" content="#1e1a17">
 <link rel="manifest" href="manifest.json">
 <title>Verso</title>
 <link rel="icon" href="favicon-v4.ico" sizes="32x32">
 <link rel="icon" type="image/png" href="favicon-v4.png">
 <link rel="apple-touch-icon" href="touch-icon-v4.png">
 <meta name="apple-mobile-web-app-title" content="Verso">
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
 <div id="insets" aria-hidden="true"></div>
@@ -29,8 +29,42 @@
   <div id="bar">
     <button id="back">&#8592; Library</button>
     <span id="title"></span>
-    <button id="toc" title="Contents" hidden>&#9776;</button>
-    <button id="theme" title="Toggle dark">&#9788;</button>
+    <button id="bookmark" title="Bookmark page" aria-label="Bookmark page">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+      </svg>
+    </button>
+    <button id="toc" title="Contents & Bookmarks" aria-label="Contents and bookmarks">&#9776;</button>
+    <button id="type-btn" title="Appearance" aria-label="Appearance">Aa</button>
+  </div>
+  <div id="type-panel" hidden>
+    <div class="panel-section">
+      <div class="section-label">Theme</div>
+      <div class="theme-swatches">
+        <button class="theme-btn swatch-light" data-theme="light" title="Paper"><span>Paper</span></button>
+        <button class="theme-btn swatch-sepia" data-theme="sepia" title="Sepia"><span>Sepia</span></button>
+        <button class="theme-btn swatch-dark" data-theme="dark" title="Dark"><span>Dark</span></button>
+        <button class="theme-btn swatch-oled" data-theme="oled" title="OLED"><span>OLED</span></button>
+      </div>
+    </div>
+    <div class="panel-section epub-only">
+      <div class="section-label">Font Size</div>
+      <div class="size-controls">
+        <button id="font-dec" aria-label="Decrease font size">A&#8722;</button>
+        <span id="font-size-val">19px</span>
+        <button id="font-inc" aria-label="Increase font size">A+</button>
+      </div>
+    </div>
+    <div class="panel-section epub-only">
+      <div class="section-label">Font Family</div>
+      <div class="font-family-grid">
+        <button class="font-btn" data-font="Georgia, serif" style="font-family:Georgia,serif">Serif</button>
+        <button class="font-btn" data-font="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" style="font-family:-apple-system,sans-serif">Sans</button>
+        <button class="font-btn" data-font="Baskerville, 'EB Garamond', serif" style="font-family:Baskerville,serif">Classic</button>
+        <button class="font-btn" data-font="ui-monospace, 'SF Mono', Menlo, monospace" style="font-family:monospace">Mono</button>
+      </div>
+    </div>
+    <div class="pdf-hint" hidden>Font styling is fixed in PDF documents.</div>
   </div>
   <div id="stage"><div id="book"></div><div id="loading" hidden>Preparing pages…</div></div>
   <div id="controls">
@@ -43,6 +77,6 @@
 <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>
