@@ -166,3 +166,6 @@ if (localStorage.dark) document.body.classList.add('dark');
 document.addEventListener('keydown', e => { if (!pf) return; if (e.key === 'ArrowRight') pf.flipNext(); if (e.key === 'ArrowLeft') pf.flipPrev(); });
 addEventListener('resize', () => { if (!current || $('#reader').hidden) return; clearTimeout(resizeT); resizeT = setTimeout(buildBook, 400); });
 renderLibrary();
+
+// ask the browser to keep our storage (books) from being auto-evicted
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
