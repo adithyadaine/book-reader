@@ -155,13 +155,15 @@ $('#file').onchange = async e => {
 // build: bumped on every (re)build so a slow, stale build can't create a second flipbook on top of the current one
 let pf = null, current = null, pages = [], toc = [], doc = null, urls = [], build = 0, resizeT, lastW = 0, lastH = 0, ui = false, uiT;
 
-// aspect given (PDF): keep the page shape. No aspect (EPUB): reflowable text fills the available screen.
+// measured from the window, not the stage: iOS home-screen apps can report a short 100dvh, which left a dead band at the bottom
+// phones: the page always fills the screen (a PDF is fitted inside it). Wider screens: PDFs keep their shape, two pages side by side.
 function bookSize(aspect) {
-  const stage = $('#stage'); const cs = getComputedStyle(stage);
-  const availH = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 4, availW = stage.clientWidth - 4;
+  const cs = getComputedStyle($('#stage'));
+  const availH = innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom), availW = innerWidth;
   const portrait = availW < 760;
-  const maxW = portrait ? availW : availW / 2;
-  let h = availH, w = aspect ? h * aspect : (portrait ? maxW : Math.min(maxW, h * 0.75));
+  if (portrait) return { w: Math.floor(availW), h: Math.floor(availH), portrait };
+  const maxW = availW / 2;
+  let h = availH - 4, w = aspect ? h * aspect : Math.min(maxW, h * 0.75);
   if (w > maxW) { w = maxW; h = w / aspect; }
   return { w: Math.floor(w), h: Math.floor(h), portrait };
 }
