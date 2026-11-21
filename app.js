@@ -52,21 +52,80 @@ async function makeCover(b) {
 }
 
 // ---------- library ----------
+let tab = 'all', openColl = null;
+const getColls = () => { try { return JSON.parse(localStorage.collections || '[]'); } catch (e) { return []; } };
+const setColls = c => localStorage.collections = JSON.stringify(c);
+
+function paintCover(el, b) {
+  const paint = c => { if (c) { el.classList.add('hascover'); el.style.backgroundImage = `url(${c})`; } };
+  paint(b.cover);
+  if (b.cover === undefined) makeCover(b).then(async c => { const fresh = await getBook(b.id); if (!fresh) return; fresh.cover = c; await putBook(fresh); paint(c); });
+}
+function bookCard(b) {
+  const el = document.createElement('div'); el.className = 'cover';
+  el.innerHTML = `<span></span><small>${b.type.toUpperCase()}</small><button class="more" aria-label="Options">⋯</button><div class="prog"><i style="width:${(b.progress || 0) * 100}%"></i></div>`;
+  el.querySelector('span').textContent = b.title;
+  paintCover(el, b);
+  el.onclick = () => openBook(b.id);
+  el.querySelector('.more').onclick = e => { e.stopPropagation(); showMenu(b.id); };
+  return el;
+}
+function showMenu(id) {
+  getBook(id).then(b => {
+    const sheet = document.createElement('div'); sheet.id = 'sheet';
+    const draw = () => {
+      const colls = getColls(); const mine = b.collections || [];
+      sheet.innerHTML = `<div class="panel"><h3></h3><div class="list"></div><button class="new">+ New collection</button><button class="danger">Delete book</button><button class="close">Done</button></div>`;
+      sheet.querySelector('h3').textContent = b.title;
+      const list = sheet.querySelector('.list');
+      if (!colls.length) list.innerHTML = '<p class="hint">No collections yet</p>';
+      colls.forEach(name => { const row = document.createElement('label'); row.className = 'row';
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = mine.includes(name);
+        cb.onchange = async () => { b.collections = cb.checked ? [...new Set([...(b.collections || []), name])] : (b.collections || []).filter(n => n !== name); await putBook(b); };
+        row.append(cb, document.createTextNode(' ' + name)); list.append(row); });
+      sheet.querySelector('.new').onclick = async () => { const n = (prompt('Collection name') || '').trim(); if (!n) return;
+        const c = getColls(); if (!c.includes(n)) { c.push(n); setColls(c); } b.collections = [...new Set([...(b.collections || []), n])]; await putBook(b); draw(); };
+      sheet.querySelector('.danger').onclick = async () => { if (confirm('Delete "' + b.title + '"?')) { await delBook(b.id); sheet.remove(); renderLibrary(); } };
+      sheet.querySelector('.close').onclick = () => { sheet.remove(); renderLibrary(); };
+    };
+    sheet.onclick = e => { if (e.target === sheet) { sheet.remove(); renderLibrary(); } };
+    draw(); document.body.append(sheet);
+  });
+}
 async function renderLibrary() {
   const books = (await allBooks()).sort((a, b) => b.added - a.added);
-  $('#shelf').innerHTML = ''; $('#empty').hidden = books.length > 0;
-  for (const b of books) {
-    const el = document.createElement('div'); el.className = 'cover';
-    el.innerHTML = `<span></span><small>${b.type.toUpperCase()}</small><button class="del">✕</button><div class="prog"><i style="width:${(b.progress || 0) * 100}%"></i></div>`;
-    el.querySelector('span').textContent = b.title;
-    const paint = c => { if (c) { el.classList.add('hascover'); el.style.backgroundImage = `url(${c})`; } };
-    paint(b.cover);
-    if (b.cover === undefined) makeCover(b).then(async c => { const fresh = await getBook(b.id); if (!fresh) return; fresh.cover = c; await putBook(fresh); paint(c); });
-    el.onclick = () => openBook(b.id);
-    el.querySelector('.del').onclick = async e => { e.stopPropagation(); if (confirm('Delete "' + b.title + '"?')) { await delBook(b.id); renderLibrary(); } };
-    $('#shelf').append(el);
+  const colls = getColls();
+  document.querySelectorAll('#tabs button').forEach(t => t.classList.toggle('on', t.dataset.tab === tab));
+  const shelf = $('#shelf'), bar = $('#collbar'); shelf.innerHTML = ''; bar.innerHTML = ''; bar.hidden = tab !== 'collections';
+  const empty = $('#empty'); empty.hidden = true;
+  if (tab === 'all') { empty.textContent = 'Add a PDF or EPUB to start reading. Books are stored privately in this browser.'; empty.hidden = books.length > 0; books.forEach(b => shelf.append(bookCard(b))); return; }
+  if (!openColl) {
+    const add = document.createElement('button'); add.textContent = '+ New collection';
+    add.onclick = () => { const n = (prompt('Collection name') || '').trim(); if (!n) return; const c = getColls(); if (!c.includes(n)) { c.push(n); setColls(c); } renderLibrary(); };
+    bar.append(add);
+    empty.textContent = 'No collections yet. Create one, then add books from the ⋯ menu on any book.'; empty.hidden = colls.length > 0;
+    colls.forEach(name => { const inC = books.filter(b => (b.collections || []).includes(name));
+      const el = document.createElement('div'); el.className = 'collcard';
+      const stack = document.createElement('div'); stack.className = 'stack';
+      inC.slice(0, 3).reverse().forEach((b, i, arr) => { const t = document.createElement('div'); t.className = 'thumb'; if (b.cover) t.style.backgroundImage = `url(${b.cover})`; t.style.transform = `translateX(${(i - (arr.length - 1) / 2) * 26}px) rotate(${(i - (arr.length - 1) / 2) * 6}deg)`; stack.append(t); });
+      const label = document.createElement('div'); label.className = 'label'; label.textContent = name;
+      const n = document.createElement('small'); n.textContent = inC.length + (inC.length === 1 ? ' book' : ' books');
+      el.append(stack, label, n); el.onclick = () => { openColl = name; renderLibrary(); }; shelf.append(el); });
+    return;
   }
+  const back = document.createElement('button'); back.textContent = '← Collections'; back.onclick = () => { openColl = null; renderLibrary(); };
+  const title = document.createElement('strong'); title.textContent = openColl;
+  const del = document.createElement('button'); del.className = 'danger'; del.textContent = 'Delete collection';
+  del.onclick = async () => { if (!confirm('Delete collection "' + openColl + '"? Books stay in your library.')) return;
+    setColls(getColls().filter(n => n !== openColl));
+    for (const b of books) if ((b.collections || []).includes(openColl)) { b.collections = b.collections.filter(n => n !== openColl); await putBook(b); }
+    openColl = null; renderLibrary(); };
+  bar.append(back, title, del);
+  const inC = books.filter(b => (b.collections || []).includes(openColl));
+  empty.textContent = 'This collection is empty. Use the ⋯ menu on a book to add it.'; empty.hidden = inC.length > 0;
+  inC.forEach(b => shelf.append(bookCard(b)));
 }
+document.querySelectorAll('#tabs button').forEach(t => t.onclick = () => { tab = t.dataset.tab; openColl = null; renderLibrary(); });
 $('#file').onchange = async e => {
   for (const f of e.target.files) {
     const type = f.name.toLowerCase().endsWith('.epub') ? 'epub' : 'pdf';

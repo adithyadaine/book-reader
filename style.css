@@ -50,3 +50,23 @@ body.dark .page canvas{filter:invert(.9) hue-rotate(180deg);mix-blend-mode:scree
 .cover.hascover{background-size:cover;background-position:center;padding:0}
 .cover.hascover span,.cover.hascover small{display:none}
 .cover.hascover .prog{left:12px}
+
+#tabs{display:flex;gap:6px;background:#2a2420;padding:4px;border-radius:12px;margin-bottom:20px;width:fit-content}
+#tabs button{background:none;padding:8px 18px}
+#tabs button.on{background:#4a3f37}
+#collbar{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+#collbar strong{flex:1;font-size:18px}
+button.danger{color:#ff6b6b}
+.cover .more{position:absolute;top:4px;right:4px;padding:0 9px 4px;font-size:20px;line-height:24px;background:#000a;border-radius:14px;z-index:2}
+.collcard{cursor:pointer;text-align:center}
+.collcard .stack{position:relative;aspect-ratio:3/2;display:flex;justify-content:center;align-items:flex-end;background:#2a2420;border-radius:14px;padding-bottom:10px;margin-bottom:8px}
+.collcard .thumb{position:absolute;bottom:10px;width:56px;height:84px;border-radius:3px;background:#5b2a2a center/cover;box-shadow:2px 3px 8px #000a}
+.collcard .label{font-weight:600}
+.collcard small{opacity:.6}
+#sheet{position:fixed;inset:0;background:#000a;z-index:50;display:flex;align-items:flex-end;justify-content:center}
+#sheet .panel{background:#2a2420;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+#sheet h3{margin:0 0 4px;font-size:16px}
+#sheet .list{max-height:34vh;overflow:auto}
+#sheet .row{display:block;padding:10px 4px;font-size:16px}
+#sheet .row input{width:20px;height:20px;vertical-align:middle;margin-right:6px}
+#sheet .hint{opacity:.6;margin:6px 0}
