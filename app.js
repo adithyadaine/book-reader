@@ -194,10 +194,10 @@ async function openBook(id) {
 }
 function releaseBook() {
   if (pf) { try { pf.destroy(); } catch (e) {} pf = null; }
-  pages.forEach(p => { p._on = false; p._clear && p._clear(p); }); pages = []; toc = [];
-  if (doc) { doc.destroy(); doc = null; }
+  pages.forEach(p => { p._on = false; try { p._clear && p._clear(p); } catch (e) {} }); pages = []; toc = [];
+  if (doc) { try { const p = doc.destroy(); if (p && p.catch) p.catch(() => {}); } catch (e) {} doc = null; }
   urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
-  $('#book').innerHTML = '';
+  const b = $('#book'); if (b) b.innerHTML = '';
 }
 async function buildBook() {
   const my = ++build;
@@ -205,7 +205,7 @@ async function buildBook() {
   const buf = await current.blob.arrayBuffer();
   const frac = getProg(current);
   const r = current.type === 'pdf' ? await preparePDF(buf) : await prepareEPUB(buf);
-  if (my !== build) { if (r.doc) r.doc.destroy(); (r.urls || []).forEach(u => URL.revokeObjectURL(u)); return; }
+  if (my !== build) { if (r.doc) { try { const p = r.doc.destroy(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } (r.urls || []).forEach(u => URL.revokeObjectURL(u)); return; }
   const { content, size, cover } = r; doc = r.doc || null; urls = r.urls || []; toc = r.toc || [];
   lastW = innerWidth; lastH = innerHeight;
   // cover + content (+ filler) + back cover => even total so last page sits alone
@@ -225,14 +225,15 @@ async function buildBook() {
   pf.on('flip', sync); sync();
 }
 function sync() {
-  if (!pf) return; const i = pf.getCurrentPageIndex(); $('#slider').value = i; $('#label').textContent = `${i} / ${pages.length - 1}`;
-  updateLazy(i); setProg(current, i / (pages.length - 1));
+  if (!pf || !current || !pages.length) return; const i = pf.getCurrentPageIndex(); $('#slider').value = i; $('#label').textContent = `${i} / ${pages.length - 1}`;
+  updateLazy(i); setProg(current, i / Math.max(1, pages.length - 1));
 }
 function updateLazy(i) {
+  if (!current) return;
   // PDF pages are canvases (several MB each), so keep fewer of them alive than EPUB pages
   const R = current.type === 'pdf' ? 3 : 4;
   pages.forEach((p, k) => { const f = p._fill; if (!f) return; const near = Math.abs(k - i) <= R;
-    if (near && !p._on) { p._on = true; f(p); } else if (!near && p._on) { p._on = false; p._clear(p); } });
+    if (near && !p._on) { p._on = true; f(p); } else if (!near && p._on) { p._on = false; try { p._clear && p._clear(p); } catch (e) {} } });
 }
 
 // ---------- table of contents ----------
@@ -265,7 +266,8 @@ async function preparePDF(buf) {
     const d = document.createElement('div'); d.className = n === 1 ? 'page hard pdfcover' : 'page'; if (n === 1) d.dataset.density = 'hard';
     // _gen guards against a slow render landing after the page was cleared (or re-filled), which stacked canvases
     d._fill = async el => { const gen = el._gen = (el._gen || 0) + 1;
-      const pg = await pdf.getPage(n); if (!el._on || gen !== el._gen) return;
+      let pg; try { pg = await pdf.getPage(n); } catch (e) { return; }
+      if (!el._on || gen !== el._gen) { try { pg.cleanup(); } catch (e) {} return; }
       const v0 = pg.getViewport({ scale: 1 });
       const maxW = size.portrait ? size.w - (insets.left + insets.right) : size.w;
       const maxH = size.portrait ? size.h - (insets.top + insets.bottom + 24) : size.h;
@@ -381,7 +383,17 @@ async function prepareEPUB(buf) {
 }
 
 // ---------- controls ----------
-$('#back').onclick = () => { setUI(false); build++; releaseBook(); current = null; document.body.classList.remove('reading'); $('#reader').hidden = true; $('#library').hidden = false; renderLibrary(); };
+$('#back').onclick = e => {
+  if (e) e.stopPropagation();
+  setUI(false);
+  build++;
+  document.body.classList.remove('reading');
+  $('#reader').hidden = true;
+  $('#library').hidden = false;
+  renderLibrary();
+  try { releaseBook(); } catch (err) { console.error(err); }
+  current = null;
+};
 $('#next').onclick = () => pf && pf.flipNext();
 $('#prev').onclick = () => pf && pf.flipPrev();
 $('#slider').onchange = e => { if (pf) { pf.turnToPage(+e.target.value); sync(); } };
