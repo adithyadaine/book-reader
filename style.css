@@ -17,7 +17,7 @@ button:hover,.btn:hover{background:#4a3f37}
 .cover .prog{position:absolute;left:22px;right:10px;bottom:8px;height:3px;background:#fff3}
 .cover .prog i{display:block;height:100%;background:#e8c36a}
 #empty{opacity:.6;text-align:center;margin-top:60px}
-#reader{position:fixed;top:0;left:0;width:100vw;height:100%;min-height:-webkit-fill-available;overflow:hidden;background:radial-gradient(ellipse at center,#3b322b,#171310)}
+#reader{position:fixed;inset:0;width:100vw;height:100%;min-height:-webkit-fill-available;overflow:hidden;background:radial-gradient(ellipse at center,#3b322b,#171310)}
 #bar{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 14px 24px;gap:10px;
   background:linear-gradient(rgba(0,0,0,.75),transparent);transform:translateY(-110%);opacity:0;pointer-events:none;transition:transform .25s,opacity .25s}
 #bar.show,#controls.show{transform:none;opacity:1;pointer-events:auto}
@@ -40,7 +40,7 @@ button:hover,.btn:hover{background:#4a3f37}
 .page .content img,.page .content svg{max-width:100%;max-height:var(--ih,100%);object-fit:contain;break-inside:avoid}
 .page .content h1,.page .content h2,.page .content h3{text-align:left;line-height:1.2}
 .page .content p{margin:0 0 .6em;text-indent:1.2em}
-.page .num{position:absolute;bottom:8px;width:100%;text-align:center;font:11px sans-serif;opacity:.45}
+.page .num{position:absolute;bottom:calc(8px + env(safe-area-inset-bottom));width:100%;text-align:center;font:11px sans-serif;opacity:.45;pointer-events:none}
 body.dark .page:not(.hard){background:#1d1b19;color:#cfc8bb}
 body.dark .page canvas{filter:invert(.9) hue-rotate(180deg);mix-blend-mode:screen}
 .page.hard.pdfcover{background:#000;padding:0}
@@ -71,5 +71,9 @@ button.danger{color:#ff6b6b}
 #sheet button.row.here{background:#3a322c}
 #sheet button.row small{opacity:.5;font-size:13px;flex:none}
 #sheet .hint{opacity:.6;margin:6px 0}
-/* phones: Safari's drop-shadow filter on a full-screen animated layer causes blank tiles and flicker */
-@media (max-width:760px){#book{filter:none}}
+#insets{position:fixed;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);left:env(safe-area-inset-left,0px);right:env(safe-area-inset-right,0px);visibility:hidden;pointer-events:none;z-index:-1}
+/* phones: stage fills entire viewport edge-to-edge; remove shadow filter to prevent tile flicker */
+@media (max-width:760px){
+  #stage{padding:0}
+  #book{filter:none}
+}

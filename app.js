@@ -155,15 +155,31 @@ $('#file').onchange = async e => {
 // build: bumped on every (re)build so a slow, stale build can't create a second flipbook on top of the current one
 let pf = null, current = null, pages = [], toc = [], doc = null, urls = [], build = 0, resizeT, lastW = 0, lastH = 0, ui = false, uiT;
 
+// ---------- safe area insets ----------
+function getInsets() {
+  const el = $('#insets');
+  if (!el) return { top: 0, bottom: 0, left: 0, right: 0 };
+  const cs = getComputedStyle(el);
+  return {
+    top: parseFloat(cs.top) || 0,
+    bottom: parseFloat(cs.bottom) || 0,
+    left: parseFloat(cs.left) || 0,
+    right: parseFloat(cs.right) || 0
+  };
+}
+
 // measured from the window, not the stage: iOS home-screen apps can report a short 100dvh, which left a dead band at the bottom
-// phones: the page always fills the screen (a PDF is fitted inside it). Wider screens: PDFs keep their shape, two pages side by side.
+// phones: stage and pages bleed edge-to-edge; text & PDFs fit safely inside insets. Wider screens: two pages side by side.
 function bookSize(aspect) {
-  const cs = getComputedStyle($('#stage'));
-  const availH = innerHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom), availW = innerWidth;
+  const r = $('#reader');
+  const availW = (r && r.clientWidth) || innerWidth;
+  const availH = (r && r.clientHeight) || innerHeight;
   const portrait = availW < 760;
   if (portrait) return { w: Math.floor(availW), h: Math.floor(availH), portrait };
-  const maxW = availW / 2;
-  let h = availH - 4, w = aspect ? h * aspect : Math.min(maxW, h * 0.75);
+  const cs = getComputedStyle($('#stage'));
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const hAvail = availH - padY - 4, maxW = availW / 2;
+  let h = hAvail, w = aspect ? h * aspect : Math.min(maxW, h * 0.75);
   if (w > maxW) { w = maxW; h = w / aspect; }
   return { w: Math.floor(w), h: Math.floor(h), portrait };
 }
@@ -244,13 +260,16 @@ async function preparePDF(buf) {
   const first = await pdf.getPage(1); const vp = first.getViewport({ scale: 1 });
   const size = bookSize(vp.width / vp.height); const content = []; let cover = null;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const insets = getInsets();
   for (let n = 1; n <= pdf.numPages; n++) {
     const d = document.createElement('div'); d.className = n === 1 ? 'page hard pdfcover' : 'page'; if (n === 1) d.dataset.density = 'hard';
     // _gen guards against a slow render landing after the page was cleared (or re-filled), which stacked canvases
     d._fill = async el => { const gen = el._gen = (el._gen || 0) + 1;
       const pg = await pdf.getPage(n); if (!el._on || gen !== el._gen) return;
       const v0 = pg.getViewport({ scale: 1 });
-      const s = Math.min(size.w / v0.width, size.h / v0.height) * dpr; const v = pg.getViewport({ scale: s });
+      const maxW = size.portrait ? size.w - (insets.left + insets.right) : size.w;
+      const maxH = size.portrait ? size.h - (insets.top + insets.bottom + 24) : size.h;
+      const s = Math.min(maxW / v0.width, maxH / v0.height) * dpr; const v = pg.getViewport({ scale: s });
       const c = document.createElement('canvas'); c.width = v.width; c.height = v.height;
       try { await pg.render({ canvasContext: c.getContext('2d'), viewport: v }).promise; } catch (e) { freeCanvas(c); return; }
       try { pg.cleanup(); } catch (e) {}
@@ -323,8 +342,12 @@ async function prepareEPUB(buf) {
     chapters.push({ path, html: body.innerHTML });
   }
   let toc = []; try { toc = await epubToc(zip, opf, opfPath); } catch (e) {}
-  // tighter margins on a phone so the text uses the screen
-  const pad = size.portrait ? 20 : 30, vpad = size.portrait ? 26 : 36, innerW = W - 2 * pad, innerH = H - 2 * vpad;
+  // tighter margins on a phone so the text uses the screen and stays clear of notch/home bar
+  const insets = getInsets();
+  const pad = size.portrait ? Math.max(16, insets.left + 16) : 30;
+  const vpadTop = size.portrait ? Math.max(22, insets.top + 8) : 36;
+  const vpadBottom = size.portrait ? Math.max(26, insets.bottom + 22) : 36;
+  const innerW = W - 2 * pad, innerH = H - vpadTop - vpadBottom;
   const styleContent = el => { el.className = 'content';
     el.style.cssText = `width:${innerW}px;height:${innerH}px;padding:0 ${pad}px;box-sizing:content-box;column-width:${innerW}px;column-gap:${2 * pad}px;--ih:${innerH}px;`; };
   const meas = document.createElement('div'); meas.style.cssText = 'position:fixed;left:-99999px;top:0;visibility:hidden'; document.body.append(meas);
@@ -344,7 +367,7 @@ async function prepareEPUB(buf) {
     }
     for (let i = 0; i < n; i++) {
       const d = document.createElement('div'); d.className = 'page';
-      d._fill = el => { const clip = document.createElement('div'); clip.className = 'clip'; clip.style.cssText = `top:${vpad}px;height:${innerH}px`;
+      d._fill = el => { const clip = document.createElement('div'); clip.className = 'clip'; clip.style.cssText = `top:${vpadTop}px;height:${innerH}px`;
         const cc = document.createElement('div'); styleContent(cc); cc.style.transform = `translateX(${-i * W}px)`; cc.innerHTML = ch.html; clip.append(cc); el.prepend(clip); };
       d._clear = el => el.querySelectorAll('.clip').forEach(c => c.remove());
       content.push(d);
