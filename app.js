@@ -188,20 +188,36 @@ const blankPage = () => { const d = document.createElement('div'); d.className =
 
 async function openBook(id) {
   current = await getBook(id);
+  if (!current) return;
   document.body.classList.add('reading');
   $('#library').hidden = true; $('#reader').hidden = false; $('#title').textContent = current.title;
   await buildBook();
 }
+function ensureBook() {
+  let b = $('#book');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'book';
+    const s = $('#stage');
+    if (s) s.prepend(b);
+  }
+  return b;
+}
 function releaseBook() {
   if (pf) { try { pf.destroy(); } catch (e) {} pf = null; }
   pages.forEach(p => { p._on = false; try { p._clear && p._clear(p); } catch (e) {} }); pages = []; toc = [];
-  if (doc) { try { const p = doc.destroy(); if (p && p.catch) p.catch(() => {}); } catch (e) {} doc = null; }
+  if (doc) {
+    try { if (doc.cleanup) doc.cleanup(); } catch (e) {}
+    try { if (doc.destroy) { const p = doc.destroy(); if (p && p.catch) p.catch(() => {}); } } catch (e) {}
+    doc = null;
+  }
   urls.forEach(u => URL.revokeObjectURL(u)); urls = [];
-  const b = $('#book'); if (b) b.innerHTML = '';
+  ensureBook().innerHTML = '';
 }
 async function buildBook() {
   const my = ++build;
   releaseBook(); $('#loading').hidden = false;
+  const bookEl = ensureBook();
   const buf = await current.blob.arrayBuffer();
   const frac = getProg(current);
   const r = current.type === 'pdf' ? await preparePDF(buf) : await prepareEPUB(buf);
@@ -215,14 +231,17 @@ async function buildBook() {
   pages.forEach((p, i) => { p.classList.add(i % 2 ? 'left' : 'right'); });
   pages.forEach((p, i) => { if (!p.classList.contains('hard') && !p.querySelector('.num')) { const n = document.createElement('div'); n.className = 'num'; n.textContent = i; p.append(n); } });
   $('#loading').hidden = true;
-  pf = new St.PageFlip($('#book'), { width: size.w, height: size.h, size: 'fixed', showCover: true, usePortrait: true,
+  pf = new St.PageFlip(bookEl, { width: size.w, height: size.h, size: 'fixed', showCover: true, usePortrait: true,
     maxShadowOpacity: 0.6, flippingTime: 600, mobileScrollSupport: false, drawShadow: true, useMouseEvents: false });
   pf.loadFromHTML(pages);
-  const start = Math.round(frac * (pages.length - 1));
-  if (start > 0) pf.turnToPage(start);
+  pf.on('flip', sync);
+  const start = Math.min(pages.length - 1, Math.max(0, Math.round(frac * (pages.length - 1))));
+  if (start > 0) {
+    try { pf.turnToPage(start); } catch (e) {}
+  }
   $('#slider').max = pages.length - 1;
   $('#toc').hidden = !toc.length;
-  pf.on('flip', sync); sync();
+  sync();
 }
 function sync() {
   if (!pf || !current || !pages.length) return; const i = pf.getCurrentPageIndex(); $('#slider').value = i; $('#label').textContent = `${i} / ${pages.length - 1}`;
