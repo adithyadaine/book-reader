@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" href="favicon-v4.png">
 <link rel="apple-touch-icon" href="touch-icon-v4.png">
 <meta name="apple-mobile-web-app-title" content="Verso">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 <section id="library">
@@ -24,11 +24,11 @@
   <div id="shelf"></div>
   <p id="empty">Add a PDF or EPUB to start reading. Books are stored privately in this browser.</p>
 </section>
-
 <section id="reader" hidden>
   <div id="bar">
     <button id="back">&#8592; Library</button>
     <span id="title"></span>
+    <button id="toc" title="Contents" hidden>&#9776;</button>
     <button id="theme" title="Toggle dark">&#9788;</button>
   </div>
   <div id="stage"><div id="book"></div><div id="loading" hidden>Preparing pages…</div></div>
@@ -39,10 +39,9 @@
     <button id="next">&#8250;</button>
   </div>
 </section>
-
 <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

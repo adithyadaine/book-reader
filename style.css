@@ -1,5 +1,7 @@
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:-apple-system,system-ui,sans-serif;background:#1e1a17;color:#eee}
+html,body{margin:0;height:100%;font-family:-apple-system,system-ui,sans-serif;background:#1e1a17;color:#eee;-webkit-text-size-adjust:100%;text-size-adjust:100%;overscroll-behavior:none;touch-action:manipulation}
+/* pin the page while reading so iOS can't rubber-band or scroll the library behind the book */
+body.reading{position:fixed;inset:0;overflow:hidden}
 [hidden]{display:none!important}
 button,.btn{background:#3a322c;color:#eee;border:0;border-radius:8px;padding:8px 14px;font-size:15px;cursor:pointer}
 button:hover,.btn:hover{background:#4a3f37}
@@ -12,24 +14,20 @@ button:hover,.btn:hover{background:#4a3f37}
   background:linear-gradient(135deg,#5b2a2a,#2f1717);box-shadow:4px 6px 14px rgba(0,0,0,.6)}
 .cover:before{content:"";position:absolute;left:0;top:0;bottom:0;width:10px;background:linear-gradient(90deg,rgba(0,0,0,.45),rgba(255,255,255,.08))}
 .cover small{font:11px sans-serif;opacity:.6;margin-top:8px;letter-spacing:1px}
-.cover .del{position:absolute;top:4px;right:4px;padding:2px 8px;display:none;background:#0008}
-.cover:hover .del{display:block}
 .cover .prog{position:absolute;left:22px;right:10px;bottom:8px;height:3px;background:#fff3}
 .cover .prog i{display:block;height:100%;background:#e8c36a}
 #empty{opacity:.6;text-align:center;margin-top:60px}
-
 #reader{position:fixed;inset:0;height:100dvh;overflow:hidden;background:radial-gradient(ellipse at center,#3b322b,#171310)}
 #bar{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:calc(10px + env(safe-area-inset-top)) 14px 24px;gap:10px;
   background:linear-gradient(rgba(0,0,0,.75),transparent);transform:translateY(-110%);opacity:0;pointer-events:none;transition:transform .25s,opacity .25s}
 #bar.show,#controls.show{transform:none;opacity:1;pointer-events:auto}
-#title{opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#title{flex:1;text-align:center;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stage{position:absolute;inset:0;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);display:flex;justify-content:center;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 #book{filter:drop-shadow(0 18px 30px rgba(0,0,0,.6))}
 #loading{position:absolute;opacity:.8}
 #controls{position:absolute;bottom:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:12px;padding:28px 18px calc(14px + env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.8));transform:translateY(110%);opacity:0;pointer-events:none;transition:transform .25s,opacity .25s}
 #slider{flex:1}
 #label{min-width:80px;text-align:center;font-size:13px;opacity:.8}
-
 .page{background:#faf5e8;color:#2b2622;overflow:hidden;position:relative}
 .page.left:after,.page.right:after{content:"";position:absolute;top:0;bottom:0;width:36px;pointer-events:none}
 .page.left:after{right:0;background:linear-gradient(270deg,rgba(0,0,0,.18),transparent)}
@@ -37,20 +35,19 @@ button:hover,.btn:hover{background:#4a3f37}
 .page.hard{background:linear-gradient(135deg,#5b2a2a,#2f1717);color:#f3e7c9;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:30px;font:600 26px Georgia,serif}
 .page canvas{position:absolute;inset:0;width:100%;height:100%;mix-blend-mode:multiply}
 .page .clip{position:absolute;left:0;right:0;overflow:hidden}
-.page .content{font:19px/1.5 Georgia,serif;text-align:justify;hyphens:auto;column-fill:auto;overflow:visible}
-.page .content img,.page .content svg{max-width:100%;max-height:100%;object-fit:contain}
+.page .content{font:19px/1.5 Georgia,serif;text-align:justify;hyphens:auto;-webkit-hyphens:auto;column-fill:auto;overflow:visible}
+/* --ih is the text area height, so a tall image shrinks to fit one page instead of splitting across columns */
+.page .content img,.page .content svg{max-width:100%;max-height:var(--ih,100%);object-fit:contain;break-inside:avoid}
 .page .content h1,.page .content h2,.page .content h3{text-align:left;line-height:1.2}
 .page .content p{margin:0 0 .6em;text-indent:1.2em}
 .page .num{position:absolute;bottom:8px;width:100%;text-align:center;font:11px sans-serif;opacity:.45}
 body.dark .page:not(.hard){background:#1d1b19;color:#cfc8bb}
 body.dark .page canvas{filter:invert(.9) hue-rotate(180deg);mix-blend-mode:screen}
-
 .page.hard.pdfcover{background:#000;padding:0}
 .page.hard.pdfcover canvas{mix-blend-mode:normal;filter:none}
 .cover.hascover{background-size:cover;background-position:center;padding:0}
 .cover.hascover span,.cover.hascover small{display:none}
 .cover.hascover .prog{left:12px}
-
 #tabs{display:flex;gap:6px;background:#2a2420;padding:4px;border-radius:12px;margin-bottom:20px;width:fit-content}
 #tabs button{background:none;padding:8px 18px}
 #tabs button.on{background:#4a3f37}
@@ -67,6 +64,12 @@ button.danger{color:#ff6b6b}
 #sheet .panel{background:#2a2420;width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
 #sheet h3{margin:0 0 4px;font-size:16px}
 #sheet .list{max-height:34vh;overflow:auto}
+#sheet .list.toc{max-height:62vh;-webkit-overflow-scrolling:touch}
 #sheet .row{display:block;padding:10px 4px;font-size:16px}
 #sheet .row input{width:20px;height:20px;vertical-align:middle;margin-right:6px}
+#sheet button.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;width:100%;background:none;text-align:left;border-radius:8px;padding-right:8px}
+#sheet button.row.here{background:#3a322c}
+#sheet button.row small{opacity:.5;font-size:13px;flex:none}
 #sheet .hint{opacity:.6;margin:6px 0}
+/* phones: Safari's drop-shadow filter on a full-screen animated layer causes blank tiles and flicker */
+@media (max-width:760px){#book{filter:none}}
