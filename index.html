@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1e1a17">
+<link rel="manifest" href="manifest.json">
+<title>Books</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<section id="library">
+  <header><h1>Library</h1>
+    <label class="btn">+ Add PDF / EPUB<input id="file" type="file" accept=".pdf,.epub,application/pdf,application/epub+zip" multiple hidden></label>
+  </header>
+  <div id="shelf"></div>
+  <p id="empty">Add a PDF or EPUB to start reading. Books are stored privately in this browser.</p>
+</section>
+
+<section id="reader" hidden>
+  <div id="bar">
+    <button id="back">&#8592; Library</button>
+    <span id="title"></span>
+    <button id="theme" title="Toggle dark">&#9788;</button>
+  </div>
+  <div id="stage"><div id="book"></div><div id="loading" hidden>Preparing pages…</div></div>
+  <div id="controls">
+    <button id="prev">&#8249;</button>
+    <input id="slider" type="range" min="0" max="0" value="0">
+    <span id="label"></span>
+    <button id="next">&#8250;</button>
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
