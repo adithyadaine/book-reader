@@ -24,7 +24,8 @@ Verso is a small web app for reading PDF and EPUB books with a realistic page-tu
 - **Collections:** Group books into named collections.
 - **Remembers your place:** Each book reopens where you left off.
 - **Dark mode** for both text and PDF pages.
-- **Private and offline-friendly:** Books are stored only in this browser.
+- **Bookmarks:** Bookmark any page. In EPUBs, bookmarks and your reading position stay on the same passage when you change the font, font size or screen size.
+- **Private and works offline:** Books are stored only in this browser. After the first visit, the app opens without an internet connection.
 
 ## Install on iPhone or iPad
 
@@ -54,7 +55,10 @@ The toolbar hides by itself after 5 seconds.
 - **EPUB:** The file is unzipped with [JSZip](https://stuk.github.io/jszip/). Each chapter is laid out in columns that match the page size, and each column becomes one page.
 - **Page turns:** Handled by [StPageFlip](https://github.com/Nodlik/StPageFlip) (`page-flip`).
 
-All three libraries load from public CDNs. There's no build step.
+- **Offline:** A service worker (`sw.js`) caches the app and its libraries. Books are already in IndexedDB, so the whole app works without a connection.
+- **Safety:** EPUB chapters are cleaned before they're shown. Scripts, embedded frames, forms, event-handler attributes and `javascript:` links are removed. A Content Security Policy in `index.html` blocks scripts from anywhere but the app itself, as a second layer of protection.
+
+All three libraries are kept in `vendor/`, so nothing loads from a CDN at runtime. There's no build step.
 
 ## Project structure
 
@@ -63,6 +67,8 @@ index.html      App layout (library + reader)
 app.js          All logic: storage, library, PDF/EPUB rendering, contents, controls
 style.css       Styles
 manifest.json   Home-screen app settings (name, colors, icons)
+sw.js           Service worker that caches the app for offline use
+vendor/         page-flip, pdf.js (+ worker) and JSZip, unmodified copies
 *-v4.png/.ico   Current icons (older icon versions are unused)
 ```
 
@@ -79,7 +85,7 @@ Opening `index.html` straight from disk (`file://`) may block the PDF worker, so
 
 ## Deploy
 
-The app is hosted with GitHub Pages from the `main` branch. After changing `app.js` or `style.css`, raise the `?v=` number on their links in `index.html`. Otherwise phones may keep using the old cached copy.
+The app is hosted with GitHub Pages from the `main` branch. After changing `app.js` or `style.css`, raise the `?v=` number on their links in `index.html` and raise `VERSION` in `sw.js` to the same number. Otherwise phones may keep using the old cached copy.
 
 ## Known limitations
 
