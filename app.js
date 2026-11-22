@@ -1,4 +1,5 @@
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// libraries are served from vendor/ (same origin) so the service worker can cache them and the app opens offline
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
 const $ = s => document.querySelector(s);
 
 // ---------- storage (IndexedDB) ----------
@@ -18,10 +19,34 @@ const delBook = id => tx('readwrite', s => s.delete(id));
 // reading position lives in localStorage so a page turn never rewrites the whole book file in IndexedDB
 const getProg = b => { const p = parseFloat(localStorage['prog:' + b.id]); return isNaN(p) ? (b.progress || 0) : p; };
 const setProg = (b, p) => { localStorage['prog:' + b.id] = p; };
+// EPUB page numbers change with font size, font and screen size, so EPUB places (reading position, bookmarks)
+// are also saved as a chapter plus how far through it, and turned back into a page number after each layout
+const getPos = b => { try { const l = JSON.parse(localStorage['pos:' + b.id] || 'null'); return l && l.ch != null ? l : null; } catch (e) { return null; } };
+const setPos = (b, l) => { if (l) localStorage['pos:' + b.id] = JSON.stringify(l); else localStorage.removeItem('pos:' + b.id); };
+
+// ---------- EPUB sanitizing ----------
+// EPUB chapters are untrusted HTML that ends up in the app's own page, so anything that can run code is removed
+const BAD_TAGS = 'script,style,link,meta,base,iframe,frame,frameset,object,embed,applet,form,input,button,textarea,select,template,noscript,portal,foreignObject,animate,set,animateMotion,animateTransform,handler,listener';
+const URL_ATTRS = ['href', 'xlink:href', 'src', 'action', 'formaction', 'poster', 'background', 'data', 'srcdoc'];
+function cleanBody(html) {
+  const d = new DOMParser().parseFromString('<!DOCTYPE html><html><body>' + html, 'text/html');
+  d.body.querySelectorAll(BAD_TAGS).forEach(n => n.remove());
+  const walker = d.createTreeWalker(d.body, NodeFilter.SHOW_COMMENT); const comments = [];
+  while (walker.nextNode()) comments.push(walker.currentNode); comments.forEach(c => c.remove());
+  d.body.querySelectorAll('*').forEach(el => { for (const a of [...el.attributes]) {
+    const name = a.name.toLowerCase(), val = a.value.replace(/[\u0000-\u0020\u007f-\u009f]/g, '').toLowerCase();
+    if (name.startsWith('on') || name === 'srcset' || name === 'srcdoc' || name === 'formaction' ||
+        (URL_ATTRS.includes(name) && /^(javascript|vbscript|data:(?!image\/(png|jpe?g|gif|webp|svg\+xml)))/.test(val)) ||
+        (name === 'style' && /expression\(|javascript:|-moz-binding/.test(val))) el.removeAttribute(a.name);
+  } });
+  return d.body;
+}
+// cleaning twice catches markup that only turns dangerous after being re-parsed
+const sanitizeHTML = html => cleanBody(cleanBody(html).innerHTML).innerHTML;
 
 // iOS kills the tab once canvas memory passes its budget, so always zero a canvas before dropping it
 const freeCanvas = c => { c.width = c.height = 0; c.remove(); };
-const PDF_OPTS = { isOffscreenCanvasSupported: false };
+const PDF_OPTS = { isOffscreenCanvasSupported: false, isEvalSupported: false };
 
 // ---------- covers ----------
 const blobToDataURL = b => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
@@ -102,7 +127,7 @@ function showMenu(id) {
         row.append(cb, document.createTextNode(' ' + name)); list.append(row); });
       sheet.querySelector('.new').onclick = async () => { const n = (prompt('Collection name') || '').trim(); if (!n) return;
         const c = getColls(); if (!c.includes(n)) { c.push(n); setColls(c); } b.collections = [...new Set([...(b.collections || []), n])]; await putBook(b); draw(); };
-      sheet.querySelector('.danger').onclick = async () => { if (confirm('Delete "' + b.title + '"?')) { await delBook(b.id); localStorage.removeItem('prog:' + b.id); localStorage.removeItem('bm:' + b.id); sheet.remove(); renderLibrary(); } };
+      sheet.querySelector('.danger').onclick = async () => { if (confirm('Delete "' + b.title + '"?')) { await delBook(b.id); localStorage.removeItem('prog:' + b.id); localStorage.removeItem('pos:' + b.id); localStorage.removeItem('bm:' + b.id); sheet.remove(); renderLibrary(); } };
       sheet.querySelector('.close').onclick = () => { sheet.remove(); renderLibrary(); };
     };
     sheet.onclick = e => { if (e.target === sheet) { sheet.remove(); renderLibrary(); } };
@@ -298,6 +323,28 @@ function getSnippetForPage(pageIdx) {
   if (match && match.title) return `${match.title} · p. ${pageIdx}`;
   return `Page ${pageIdx}`;
 }
+function pageLoc(idx) {
+  const p = pages[idx]; if (!p || p._ch == null) return null;
+  return { ch: p._ch, off: p._col / p._n };
+}
+function locPage(loc) {
+  if (!loc || loc.ch == null) return null;
+  let first = -1, n = 0;
+  pages.forEach((p, k) => { if (p._ch === loc.ch) { if (first < 0) first = k; n++; } });
+  if (first < 0) return null;
+  return first + Math.max(0, Math.min(n - 1, Math.round(loc.off * n)));
+}
+// after an EPUB is laid out, move each bookmark to the page its chapter position now falls on.
+// bookmarks saved before chapter positions existed are upgraded using the current layout.
+function relinkBookmarks() {
+  if (!current || current.type !== 'epub') return;
+  const bms = getBookmarks(current.id); let changed = false;
+  bms.forEach(b => {
+    if (b.ch == null) { const l = pageLoc(b.page); if (l) { Object.assign(b, l); changed = true; } }
+    else { const p = locPage(b); if (p != null && p !== b.page) { b.page = p; changed = true; } }
+  });
+  if (changed) setBookmarks(current.id, bms);
+}
 function toggleBookmark() {
   if (!current || !pf) return;
   const pageIdx = pf.getCurrentPageIndex();
@@ -307,6 +354,7 @@ function toggleBookmark() {
     bms = bms.filter(b => b.page !== pageIdx);
   } else {
     bms.push({
+      ...(pageLoc(pageIdx) || {}),
       page: pageIdx,
       text: getSnippetForPage(pageIdx),
       time: Date.now()
@@ -428,17 +476,20 @@ async function buildBook() {
     maxShadowOpacity: 0.6, flippingTime: 600, mobileScrollSupport: false, drawShadow: true, useMouseEvents: false });
   pf.loadFromHTML(pages);
   pf.on('flip', sync);
-  const start = Math.min(pages.length - 1, Math.max(0, Math.round(frac * (pages.length - 1))));
+  const loc = current.type === 'epub' ? locPage(getPos(current)) : null;
+  const start = loc != null ? loc : Math.min(pages.length - 1, Math.max(0, Math.round(frac * (pages.length - 1))));
   if (start > 0) {
     try { pf.turnToPage(start); } catch (e) {}
   }
   $('#slider').max = pages.length - 1;
+  relinkBookmarks();
   updateBookmarkRibbons();
   sync();
 }
 function sync() {
   if (!pf || !current || !pages.length) return; const i = pf.getCurrentPageIndex(); $('#slider').value = i; $('#label').textContent = `${i} / ${pages.length - 1}`;
   updateLazy(i); updateBookmarkUI(i); setProg(current, i / Math.max(1, pages.length - 1));
+  if (current.type === 'epub') setPos(current, pageLoc(i));
 }
 function updateLazy(i) {
   if (!current) return;
@@ -611,11 +662,11 @@ async function prepareEPUB(buf) {
     const raw = await text(path);
     let doc = new DOMParser().parseFromString(raw, 'application/xhtml+xml');
     if (doc.querySelector('parsererror')) doc = new DOMParser().parseFromString(raw, 'text/html');
-    const body = doc.body || doc.querySelector('body'); if (!body) continue;
-    body.querySelectorAll('script,style,link').forEach(n => n.remove());
-    for (const img of body.querySelectorAll('img')) { const u = await blobURL(resolve(path, img.getAttribute('src') || '')); if (u) img.setAttribute('src', u); }
+    const srcBody = doc.body || doc.querySelector('body'); if (!srcBody) continue;
+    const body = cleanBody(srcBody.innerHTML);
+    for (const img of body.querySelectorAll('img')) { const u = await blobURL(resolve(path, img.getAttribute('src') || '')); if (u) img.setAttribute('src', u); else img.removeAttribute('src'); }
     for (const im of body.querySelectorAll('image')) { const a = im.getAttribute('xlink:href') || im.getAttribute('href'); const u = a && await blobURL(resolve(path, a)); if (u) { im.setAttribute('href', u); im.setAttribute('xlink:href', u); } }
-    chapters.push({ path, html: body.innerHTML });
+    chapters.push({ path, html: sanitizeHTML(body.innerHTML) });
   }
   let toc = []; try { toc = await epubToc(zip, opf, opfPath); } catch (e) {}
   const insets = getInsets();
@@ -628,7 +679,7 @@ async function prepareEPUB(buf) {
   const meas = document.createElement('div'); meas.style.cssText = 'position:fixed;left:-99999px;top:0;visibility:hidden'; document.body.append(meas);
   if (document.fonts && document.fonts.ready) await document.fonts.ready;
   const content = [];
-  for (const ch of chapters) {
+  for (const [ci, ch] of chapters.entries()) {
     const m = document.createElement('div'); m.className = 'page'; m.style.cssText = `width:${W}px;height:${H}px`; const c = document.createElement('div'); styleContent(c); c.innerHTML = ch.html;
     meas.innerHTML = ''; m.append(c); meas.append(m);
     await Promise.all([...c.querySelectorAll('img')].map(i => i.decode ? i.decode().catch(() => {}) : 0));
@@ -640,7 +691,7 @@ async function prepareEPUB(buf) {
       t.page = 1 + first + Math.max(0, Math.min(n - 1, col));
     }
     for (let i = 0; i < n; i++) {
-      const d = document.createElement('div'); d.className = 'page';
+      const d = document.createElement('div'); d.className = 'page'; d._ch = ci; d._col = i; d._n = n;
       d._fill = el => { const clip = document.createElement('div'); clip.className = 'clip'; clip.style.cssText = `top:${vpadTop}px;height:${innerH}px`;
         const cc = document.createElement('div'); styleContent(cc); cc.style.transform = `translateX(${-i * W}px)`; cc.innerHTML = ch.html; clip.append(cc); el.prepend(clip); };
       d._clear = el => el.querySelectorAll('.clip').forEach(c => c.remove());
@@ -722,6 +773,8 @@ function setUI(v) {
 }
 
 const stageEl = $('#stage'); let g = null;
+// links inside book text point at files in the EPUB zip, so following one would leave the app
+stageEl.addEventListener('click', e => { if (e.target.closest && e.target.closest('a')) e.preventDefault(); });
 stageEl.addEventListener('pointerdown', e => {
   if (!$('#type-panel').hidden) $('#type-panel').hidden = true;
   g = { x: e.clientX, y: e.clientY };
@@ -743,3 +796,5 @@ setFontFamily(getFontFamily());
 
 renderLibrary();
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+// service worker keeps the app and its libraries cached so it opens without a connection
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
